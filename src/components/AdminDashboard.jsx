@@ -18,7 +18,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   MessageSquare,
-  Save
+  Save,
+  Menu
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -45,6 +46,7 @@ const AdminDashboard = ({ onClose }) => {
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [requirementsMap, setRequirementsMap] = useState({});
   const [savingLeads, setSavingLeads] = useState({});
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Services Data States
   const [services, setServices] = useState([]);
@@ -654,12 +656,21 @@ const AdminDashboard = ({ onClose }) => {
   return (
     <div className="admin-container" id="admin-dashboard-root">
       
+      {/* Sidebar Overlay for Mobile Backdrop */}
+      {isSidebarOpen && (
+        <div 
+          className="sidebar-overlay" 
+          onClick={() => setIsSidebarOpen(false)} 
+          id="dashboard-sidebar-overlay"
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="dashboard-sidebar">
+      <aside className={`dashboard-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-title">Manage</div>
         <div className="sidebar-menu">
           <button 
-            onClick={() => setActiveTab('leads_new')}
+            onClick={() => { setActiveTab('leads_new'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'leads_new' ? 'active' : ''}`}
             id="sidebar-tab-leads-new"
           >
@@ -667,7 +678,7 @@ const AdminDashboard = ({ onClose }) => {
             <span>Incoming Leads</span>
           </button>
           <button 
-            onClick={() => setActiveTab('leads_followup')}
+            onClick={() => { setActiveTab('leads_followup'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'leads_followup' ? 'active' : ''}`}
             id="sidebar-tab-leads-followup"
           >
@@ -675,7 +686,7 @@ const AdminDashboard = ({ onClose }) => {
             <span>Follow Up</span>
           </button>
           <button 
-            onClick={() => setActiveTab('leads_interested')}
+            onClick={() => { setActiveTab('leads_interested'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'leads_interested' ? 'active' : ''}`}
             id="sidebar-tab-leads-interested"
           >
@@ -683,7 +694,7 @@ const AdminDashboard = ({ onClose }) => {
             <span>Interested</span>
           </button>
           <button 
-            onClick={() => setActiveTab('leads_not_interested')}
+            onClick={() => { setActiveTab('leads_not_interested'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'leads_not_interested' ? 'active' : ''}`}
             id="sidebar-tab-leads-not-interested"
           >
@@ -691,7 +702,7 @@ const AdminDashboard = ({ onClose }) => {
             <span>Not Interested</span>
           </button>
           <button 
-            onClick={() => setActiveTab('services')}
+            onClick={() => { setActiveTab('services'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'services' ? 'active' : ''}`}
             id="sidebar-tab-services"
           >
@@ -699,7 +710,7 @@ const AdminDashboard = ({ onClose }) => {
             <span>Services Demo</span>
           </button>
           <button 
-            onClick={() => setActiveTab('projects')}
+            onClick={() => { setActiveTab('projects'); setIsSidebarOpen(false); }}
             className={`sidebar-btn ${activeTab === 'projects' ? 'active' : ''}`}
             id="sidebar-tab-projects"
           >
@@ -709,7 +720,7 @@ const AdminDashboard = ({ onClose }) => {
         </div>
         <div className="sidebar-footer">
           <button 
-            onClick={onClose}
+            onClick={() => { onClose(); setIsSidebarOpen(false); }}
             className="sidebar-btn"
             style={{ width: '100%', marginBottom: '8px' }}
             id="sidebar-close-btn"
@@ -732,9 +743,19 @@ const AdminDashboard = ({ onClose }) => {
       {/* Main Dashboard Panel */}
       <main className="dashboard-main">
         <div className="dashboard-header">
-          <div className="dashboard-title-group">
-            <h1>Control Panel</h1>
-            <p>Welcome back, GrowStack Administrator</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button 
+              className="dashboard-sidebar-toggle"
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              id="btn-toggle-dashboard-sidebar"
+            >
+              <Menu size={18} />
+              <span>Menu</span>
+            </button>
+            <div className="dashboard-title-group">
+              <h1>Control Panel</h1>
+              <p>Welcome back, GrowStack Administrator</p>
+            </div>
           </div>
         </div>
 
