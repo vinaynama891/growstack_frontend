@@ -111,6 +111,10 @@ const AdminDashboard = ({ onClose }) => {
   });
   const [submittingFinance, setSubmittingFinance] = useState(false);
   const [financeError, setFinanceError] = useState('');
+  // Installment form (shown in edit modal)
+  const [instForm, setInstForm] = useState({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
+  const [submittingInst, setSubmittingInst] = useState(false);
+  const [instError, setInstError] = useState('');
 
   // 1. Monitor Authentication Changes
   useEffect(() => {
@@ -459,6 +463,8 @@ const AdminDashboard = ({ onClose }) => {
       date: new Date(entry.date).toISOString().split('T')[0]
     });
     setFinanceError('');
+    setInstForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
+    setInstError('');
     setShowFinanceModal(true);
   };
 
@@ -525,6 +531,61 @@ const AdminDashboard = ({ onClose }) => {
       } else {
         const resData = await response.json();
         alert(handleApiError(response.status, resData.message || 'Failed to delete entry.'));
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  // Add installment to an income entry
+  const handleAddInstallment = async (entryId) => {
+    if (!instForm.amount || parseFloat(instForm.amount) <= 0) {
+      setInstError('Amount must be greater than 0.');
+      return;
+    }
+    setSubmittingInst(true);
+    setInstError('');
+    try {
+      const response = await fetch(`${API_URL}/admin/finance/${entryId}/installment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(instForm)
+      });
+      let resData;
+      try { resData = await response.json(); } catch { resData = {}; }
+      if (response.ok) {
+        // Update the entry in local state with recalculated values
+        setFinanceEntries(prev => prev.map(e => e._id === entryId ? resData.entry : e));
+        fetchFinanceSummary();
+        setInstForm({ amount: '', date: new Date().toISOString().split('T')[0], note: '' });
+        // Refresh edit modal data
+        handleOpenFinanceEditModal(resData.entry);
+      } else {
+        setInstError(resData.message || 'Failed to add installment.');
+      }
+    } catch (err) {
+      setInstError('Network error.');
+    } finally {
+      setSubmittingInst(false);
+    }
+  };
+
+  // Delete installment from an income entry
+  const handleDeleteInstallment = async (entryId, instId) => {
+    if (!window.confirm('Remove this payment installment?')) return;
+    try {
+      const response = await fetch(`${API_URL}/admin/finance/${entryId}/installment/${instId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let resData;
+      try { resData = await response.json(); } catch { resData = {}; }
+      if (response.ok) {
+        setFinanceEntries(prev => prev.map(e => e._id === entryId ? resData.entry : e));
+        fetchFinanceSummary();
+        handleOpenFinanceEditModal(resData.entry);
+      } else {
+        alert(resData.message || 'Failed to remove installment.');
       }
     } catch (err) {
       alert('Network error.');
@@ -1919,6 +1980,115 @@ const AdminDashboard = ({ onClose }) => {
                 </button>
               </div>
             </form>
+
+            {/* ── INSTALLMENT SECTION (only in edit mode for income) ── */}
+            {financeModalMode === 'edit' && financeForm.type === 'income' && (() => {
+              const currentEntry = financeEntries.find(e => e._id === editingFinanceId);
+              const installments = currentEntry?.installments || [];
+              return (
+                <div className="installment-section">
+                  <div className="installment-section-header">
+                    <IndianRupee size={16} />
+                    <span>Payment Installments</span>
+                    <span className="installment-count">{installments.length} payment{installments.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  {/* Existing installments timeline */}
+                  {installments.length > 0 ? (
+                    <div className="installment-timeline">
+                      {installments.map((inst, idx) => (
+                        <div className="installment-item" key={inst._id || idx}>
+                          <div className="installment-dot" />
+                          <div className="installment-info">
+                            <div className="installment-row">
+                              <span className="installment-amount">{formatCurrency(inst.amount)}</span>
+                              <span className="installment-date">
+                                {new Date(inst.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn-icon delete"
+                                style={{ width: '24px', height: '24px', padding: '0', flexShrink: 0 }}
+                                title="Remove installment"
+                                onClick={() => handleDeleteInstallment(editingFinanceId, inst._id)}
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            </div>
+                            {inst.note && <span className="installment-note">{inst.note}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '0.82rem', color: 'var(--text-dim)', textAlign: 'center', padding: '12px 0' }}>
+                      No payments recorded yet.
+                    </p>
+                  )}
+
+                  {/* Add new installment form */}
+                  <div className="installment-add-form">
+                    <div className="installment-add-title">
+                      <Plus size={14} /> Add New Payment
+                    </div>
+                    {instError && (
+                      <div className="form-alert error" style={{ marginBottom: '12px', padding: '8px 12px', fontSize: '0.82rem' }}>
+                        <span>{instError}</span>
+                      </div>
+                    )}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Amount (₹) *</label>
+                        <input
+                          type="number"
+                          value={instForm.amount}
+                          onChange={e => setInstForm(p => ({ ...p, amount: e.target.value }))}
+                          placeholder="0"
+                          min="0"
+                          step="0.01"
+                          className="form-input"
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ fontSize: '0.78rem' }}>Payment Date *</label>
+                        <input
+                          type="date"
+                          value={instForm.date}
+                          onChange={e => setInstForm(p => ({ ...p, date: e.target.value }))}
+                          className="form-input"
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginTop: '10px', marginBottom: '12px' }}>
+                      <label className="form-label" style={{ fontSize: '0.78rem' }}>Note (optional)</label>
+                      <input
+                        type="text"
+                        value={instForm.note}
+                        onChange={e => setInstForm(p => ({ ...p, note: e.target.value }))}
+                        placeholder="e.g. 2nd installment via UPI"
+                        className="form-input"
+                        style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ width: '100%', padding: '9px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                      onClick={() => handleAddInstallment(editingFinanceId)}
+                      disabled={submittingInst}
+                      id="btn-add-installment"
+                    >
+                      {submittingInst
+                        ? <><Loader2 size={14} style={{ animation: 'spin 1.5s linear infinite' }} /> Adding...</>
+                        : <><Plus size={14} /> Add Payment</>
+                      }
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

@@ -2366,3 +2366,133 @@ html, body {
 .finance-pending-value.clear {
   color: #10b981;
 }
+
+/* ── Installment Section in Edit Modal ── */
+.installment-section {
+  margin-top: 0;
+  border-top: 1px solid var(--border-glass);
+  padding: 20px 32px 24px;
+  background: rgba(59, 130, 246, 0.03);
+}
+
+.installment-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+.installment-count {
+  margin-left: auto;
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Timeline */
+.installment-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 16px;
+  position: relative;
+  padding-left: 20px;
+}
+
+.installment-timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: linear-gradient(to bottom, rgba(59, 130, 246, 0.4), rgba(16, 185, 129, 0.2));
+  border-radius: 2px;
+}
+
+.installment-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  position: relative;
+}
+
+.installment-dot {
+  position: absolute;
+  left: -18px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-deep);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+  flex-shrink: 0;
+}
+
+.installment-info {
+  flex: 1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  padding: 10px 14px;
+  transition: background 0.2s;
+}
+
+.installment-info:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.installment-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.installment-amount {
+  font-weight: 800;
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  color: #10b981;
+  flex: 1;
+}
+
+.installment-date {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.installment-note {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* Add installment form */
+.installment-add-form {
+  background: rgba(59, 130, 246, 0.05);
+  border: 1px dashed rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.installment-add-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 12px;
+}
