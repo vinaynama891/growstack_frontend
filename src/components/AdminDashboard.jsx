@@ -19,7 +19,15 @@ import {
   ThumbsDown,
   MessageSquare,
   Save,
-  Menu
+  Menu,
+  DollarSign,
+  TrendingUp,
+  TrendingDown,
+  BarChart2,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  IndianRupee,
+  Filter
 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -83,6 +91,25 @@ const AdminDashboard = ({ onClose }) => {
   const [submittingProject, setSubmittingProject] = useState(false);
   const [projectError, setProjectError] = useState('');
 
+  // Finance States
+  const [financeEntries, setFinanceEntries] = useState([]);
+  const [financeSummary, setFinanceSummary] = useState(null);
+  const [loadingFinance, setLoadingFinance] = useState(false);
+  const [financeFilter, setFinanceFilter] = useState('all'); // 'all' | 'income' | 'expense'
+  const [showFinanceModal, setShowFinanceModal] = useState(false);
+  const [financeModalMode, setFinanceModalMode] = useState('create');
+  const [editingFinanceId, setEditingFinanceId] = useState(null);
+  const [financeForm, setFinanceForm] = useState({
+    type: 'income',
+    title: '',
+    description: '',
+    amount: '',
+    category: 'General',
+    date: new Date().toISOString().split('T')[0]
+  });
+  const [submittingFinance, setSubmittingFinance] = useState(false);
+  const [financeError, setFinanceError] = useState('');
+
   // 1. Monitor Authentication Changes
   useEffect(() => {
     const handleAuthChange = () => {
@@ -104,6 +131,9 @@ const AdminDashboard = ({ onClose }) => {
       fetchServices();
     } else if (activeTab === 'projects') {
       fetchProjects();
+    } else if (activeTab === 'finance') {
+      fetchFinance();
+      fetchFinanceSummary();
     }
   }, [token, activeTab]);
 
@@ -360,6 +390,148 @@ const AdminDashboard = ({ onClose }) => {
       console.error('Service delete error:', err);
       alert('Network connection failed.');
     }
+  };
+
+  // --- Finance Handlers ---
+  const fetchFinance = async () => {
+    setLoadingFinance(true);
+    try {
+      const response = await fetch(`${API_URL}/admin/finance`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFinanceEntries(data);
+      } else {
+        handleApiError(response.status, 'Failed to fetch finance.');
+      }
+    } catch (err) {
+      console.error('Fetch finance error:', err);
+    } finally {
+      setLoadingFinance(false);
+    }
+  };
+
+  const fetchFinanceSummary = async () => {
+    try {
+      const response = await fetch(`${API_URL}/admin/finance/summary`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFinanceSummary(data);
+      }
+    } catch (err) {
+      console.error('Finance summary error:', err);
+    }
+  };
+
+  const handleOpenFinanceCreateModal = () => {
+    setFinanceModalMode('create');
+    setEditingFinanceId(null);
+    setFinanceForm({
+      type: 'income',
+      title: '',
+      description: '',
+      amount: '',
+      category: 'General',
+      date: new Date().toISOString().split('T')[0]
+    });
+    setFinanceError('');
+    setShowFinanceModal(true);
+  };
+
+  const handleOpenFinanceEditModal = (entry) => {
+    setFinanceModalMode('edit');
+    setEditingFinanceId(entry._id);
+    setFinanceForm({
+      type: entry.type,
+      title: entry.title,
+      description: entry.description || '',
+      amount: entry.amount.toString(),
+      category: entry.category || 'General',
+      date: new Date(entry.date).toISOString().split('T')[0]
+    });
+    setFinanceError('');
+    setShowFinanceModal(true);
+  };
+
+  const handleFinanceFormChange = (e) => {
+    const { name, value } = e.target;
+    setFinanceForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleFinanceSubmit = async (e) => {
+    e.preventDefault();
+    if (!financeForm.title.trim() || !financeForm.amount) {
+      setFinanceError('Title and amount are required.');
+      return;
+    }
+    if (parseFloat(financeForm.amount) < 0) {
+      setFinanceError('Amount cannot be negative.');
+      return;
+    }
+
+    setSubmittingFinance(true);
+    setFinanceError('');
+
+    const url = financeModalMode === 'create'
+      ? `${API_URL}/admin/finance`
+      : `${API_URL}/admin/finance/${editingFinanceId}`;
+    const method = financeModalMode === 'create' ? 'POST' : 'PUT';
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(financeForm)
+      });
+      let resData;
+      try { resData = await response.json(); } catch { resData = {}; }
+      if (response.ok) {
+        setShowFinanceModal(false);
+        fetchFinance();
+        fetchFinanceSummary();
+      } else if (response.status === 404) {
+        setFinanceError('Finance API not found. Please redeploy the server with the latest code.');
+      } else {
+        const msg = handleApiError(response.status, resData.message || 'Failed to save entry.');
+        setFinanceError(msg);
+      }
+    } catch (err) {
+      console.error('Finance submit error:', err);
+      setFinanceError('Cannot reach server. Check your internet connection or if the server is running.');
+    } finally {
+      setSubmittingFinance(false);
+    }
+  };
+
+  const handleDeleteFinance = async (id) => {
+    if (!window.confirm('Delete this finance entry?')) return;
+    try {
+      const response = await fetch(`${API_URL}/admin/finance/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        fetchFinance();
+        fetchFinanceSummary();
+      } else {
+        const resData = await response.json();
+        alert(handleApiError(response.status, resData.message || 'Failed to delete entry.'));
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
+
+  const getFilteredFinance = () => {
+    if (financeFilter === 'all') return financeEntries;
+    return financeEntries.filter(e => e.type === financeFilter);
   };
 
   // 3b. Projects Showcase Management Handlers
@@ -717,6 +889,14 @@ const AdminDashboard = ({ onClose }) => {
             <Briefcase size={18} />
             <span>My Work</span>
           </button>
+          <button 
+            onClick={() => { setActiveTab('finance'); setIsSidebarOpen(false); }}
+            className={`sidebar-btn ${activeTab === 'finance' ? 'active' : ''}`}
+            id="sidebar-tab-finance"
+          >
+            <IndianRupee size={18} />
+            <span>Finance</span>
+          </button>
         </div>
         <div className="sidebar-footer">
           <button 
@@ -1017,6 +1197,217 @@ const AdminDashboard = ({ onClose }) => {
             )}
           </div>
         )}
+
+        {/* --- FINANCE PANEL --- */}
+        {activeTab === 'finance' && (
+          <div className="dashboard-panel" id="finance-manager-panel">
+            <div className="services-manager-header">
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <IndianRupee style={{ color: 'var(--primary)' }} /> Finance Manager
+              </h2>
+              <button
+                onClick={handleOpenFinanceCreateModal}
+                className="btn-primary"
+                style={{ padding: '8px 16px', fontSize: '0.9rem', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                id="btn-add-finance-entry"
+              >
+                <Plus size={16} /> Add Entry
+              </button>
+            </div>
+
+            {loadingFinance ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+                <Loader2 size={36} style={{ color: 'var(--primary)', animation: 'spin 1.5s linear infinite' }} />
+              </div>
+            ) : (
+              <>
+                {/* ── ANALYTICS CARDS ── */}
+                <div className="finance-analytics-row">
+                  <div className="finance-card income">
+                    <div className="finance-card-icon">
+                      <ArrowUpCircle size={28} />
+                    </div>
+                    <div className="finance-card-info">
+                      <span className="finance-card-label">Total Income</span>
+                      <span className="finance-card-value">{formatCurrency(financeSummary?.totalIncome)}</span>
+                    </div>
+                  </div>
+
+                  <div className="finance-card expense">
+                    <div className="finance-card-icon">
+                      <ArrowDownCircle size={28} />
+                    </div>
+                    <div className="finance-card-info">
+                      <span className="finance-card-label">Total Expenses</span>
+                      <span className="finance-card-value">{formatCurrency(financeSummary?.totalExpense)}</span>
+                    </div>
+                  </div>
+
+                  <div className={`finance-card profit-loss ${(financeSummary?.netPL ?? 0) >= 0 ? 'profit' : 'loss'}`}>
+                    <div className="finance-card-icon">
+                      {(financeSummary?.netPL ?? 0) >= 0 ? <TrendingUp size={28} /> : <TrendingDown size={28} />}
+                    </div>
+                    <div className="finance-card-info">
+                      <span className="finance-card-label">{(financeSummary?.netPL ?? 0) >= 0 ? 'Net Profit' : 'Net Loss'}</span>
+                      <span className="finance-card-value">{formatCurrency(Math.abs(financeSummary?.netPL ?? 0))}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── MONTHLY CHART ── */}
+                {financeSummary?.monthly?.length > 0 && (
+                  <div className="finance-chart-section">
+                    <h3 className="finance-section-title"><BarChart2 size={18} /> Monthly Breakdown</h3>
+                    <div className="finance-bar-chart">
+                      {(() => {
+                        const allAmounts = financeSummary.monthly.flatMap(m => [m.income, m.expense]);
+                        const maxVal = Math.max(...allAmounts, 1);
+                        return financeSummary.monthly.map((m, i) => (
+                          <div className="finance-bar-group" key={i}>
+                            <div className="finance-bars">
+                              <div className="finance-bar-wrap">
+                                <span className="finance-bar-amount" style={{ color: '#10b981' }}>{formatCurrency(m.income)}</span>
+                                <div
+                                  className="finance-bar income-bar"
+                                  style={{ height: `${Math.round((m.income / maxVal) * 140)}px` }}
+                                  title={`Income: ${formatCurrency(m.income)}`}
+                                />
+                              </div>
+                              <div className="finance-bar-wrap">
+                                <span className="finance-bar-amount" style={{ color: '#ef4444' }}>{formatCurrency(m.expense)}</span>
+                                <div
+                                  className="finance-bar expense-bar"
+                                  style={{ height: `${Math.round((m.expense / maxVal) * 140)}px` }}
+                                  title={`Expense: ${formatCurrency(m.expense)}`}
+                                />
+                              </div>
+                            </div>
+                            <span className="finance-bar-label">{m.month}</span>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className="finance-chart-legend">
+                      <span className="legend-dot income" /> Income
+                      <span className="legend-dot expense" style={{ marginLeft: '16px' }} /> Expense
+                    </div>
+                  </div>
+                )}
+
+                {/* ── CATEGORY BREAKDOWN ── */}
+                {financeSummary?.categories?.length > 0 && (
+                  <div className="finance-chart-section">
+                    <h3 className="finance-section-title"><Filter size={18} /> Category Breakdown</h3>
+                    <div className="finance-categories-grid">
+                      {financeSummary.categories.map((cat, i) => {
+                        const net = cat.income - cat.expense;
+                        return (
+                          <div className="finance-category-card" key={i}>
+                            <div className="finance-category-name">{cat.name}</div>
+                            <div className="finance-category-row">
+                              <span style={{ color: '#10b981' }}>↑ {formatCurrency(cat.income)}</span>
+                              <span style={{ color: '#ef4444' }}>↓ {formatCurrency(cat.expense)}</span>
+                            </div>
+                            <div className={`finance-category-net ${net >= 0 ? 'positive' : 'negative'}`}>
+                              Net: {net >= 0 ? '+' : ''}{formatCurrency(net)}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── TRANSACTIONS TABLE ── */}
+                <div className="finance-chart-section">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                    <h3 className="finance-section-title" style={{ margin: 0 }}><FileText size={18} /> Transactions</h3>
+                    <div className="finance-filter-tabs">
+                      {['all', 'income', 'expense'].map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setFinanceFilter(f)}
+                          className={`finance-filter-btn ${financeFilter === f ? 'active' : ''} ${f}`}
+                        >
+                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {getFilteredFinance().length === 0 ? (
+                    <div className="leads-empty">
+                      <DollarSign size={48} className="leads-empty-icon" />
+                      <p>No {financeFilter !== 'all' ? financeFilter : ''} entries found. Click "Add Entry" to begin.</p>
+                    </div>
+                  ) : (
+                    <div className="finance-table-wrapper">
+                      <table className="finance-table">
+                        <thead>
+                          <tr>
+                            <th>Type</th>
+                            <th>Title & Description</th>
+                            <th>Category</th>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {getFilteredFinance().map((entry, idx) => (
+                            <tr key={entry._id} id={`finance-row-${idx}`}>
+                              <td>
+                                <span className={`finance-type-badge ${entry.type}`}>
+                                  {entry.type === 'income' ? <ArrowUpCircle size={12} /> : <ArrowDownCircle size={12} />}
+                                  {entry.type}
+                                </span>
+                              </td>
+                              <td>
+                                <div className="finance-title-cell">
+                                  <strong>{entry.title}</strong>
+                                  {entry.description && <span className="finance-desc">{entry.description}</span>}
+                                </div>
+                              </td>
+                              <td><span className="finance-category-badge">{entry.category || 'General'}</span></td>
+                              <td style={{ color: 'var(--text-dim)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                                {new Date(entry.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </td>
+                              <td>
+                                <span className={`finance-amount-cell ${entry.type}`}>
+                                  {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    onClick={() => handleOpenFinanceEditModal(entry)}
+                                    className="btn-icon edit"
+                                    title="Edit"
+                                    id={`btn-edit-finance-${idx}`}
+                                  >
+                                    <Edit size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFinance(entry._id)}
+                                    className="btn-icon delete"
+                                    title="Delete"
+                                    id={`btn-delete-finance-${idx}`}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </main>
 
       {/* --- ADD / EDIT SERVICE DIALOG MODAL --- */}
@@ -1266,6 +1657,162 @@ const AdminDashboard = ({ onClose }) => {
                     </>
                   ) : (
                     'Save Changes'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* --- ADD / EDIT FINANCE MODAL --- */}
+      {showFinanceModal && (
+        <div className="modal-overlay" onClick={() => setShowFinanceModal(false)} id="finance-form-modal-overlay">
+          <div className="modal-content" onClick={e => e.stopPropagation()} id="finance-form-modal">
+            <button
+              onClick={() => setShowFinanceModal(false)}
+              style={{ position: 'absolute', top: '20px', right: '20px', background: 'transparent', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}
+              id="btn-close-finance-modal"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="modal-title" id="finance-modal-heading">
+              {financeModalMode === 'create' ? 'Add Finance Entry' : 'Edit Finance Entry'}
+            </h3>
+
+            {financeError && (
+              <div className="form-alert error" style={{ marginBottom: '20px' }}>
+                <Lock size={16} />
+                <span>{financeError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleFinanceSubmit} id="finance-crud-form">
+              {/* Type Toggle */}
+              <div className="form-group">
+                <label className="form-label">Entry Type</label>
+                <div className="finance-type-toggle">
+                  <button
+                    type="button"
+                    className={`finance-type-btn income ${financeForm.type === 'income' ? 'active' : ''}`}
+                    onClick={() => setFinanceForm(p => ({ ...p, type: 'income' }))}
+                  >
+                    <ArrowUpCircle size={16} /> Income
+                  </button>
+                  <button
+                    type="button"
+                    className={`finance-type-btn expense ${financeForm.type === 'expense' ? 'active' : ''}`}
+                    onClick={() => setFinanceForm(p => ({ ...p, type: 'expense' }))}
+                  >
+                    <ArrowDownCircle size={16} /> Expense
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="finance-title-input" className="form-label">Title *</label>
+                <input
+                  type="text"
+                  id="finance-title-input"
+                  name="title"
+                  value={financeForm.title}
+                  onChange={handleFinanceFormChange}
+                  placeholder={financeForm.type === 'income' ? 'e.g. Client Payment — ABC Corp' : 'e.g. Office Rent July'}
+                  className="form-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="finance-desc-input" className="form-label">Description</label>
+                <textarea
+                  id="finance-desc-input"
+                  name="description"
+                  value={financeForm.description}
+                  onChange={handleFinanceFormChange}
+                  placeholder="Additional details, invoice number, notes..."
+                  className="form-input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label htmlFor="finance-amount-input" className="form-label">Amount (₹) *</label>
+                  <input
+                    type="number"
+                    id="finance-amount-input"
+                    name="amount"
+                    value={financeForm.amount}
+                    onChange={handleFinanceFormChange}
+                    placeholder="0"
+                    min="0"
+                    step="0.01"
+                    className="form-input"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="finance-date-input" className="form-label">Date *</label>
+                  <input
+                    type="date"
+                    id="finance-date-input"
+                    name="date"
+                    value={financeForm.date}
+                    onChange={handleFinanceFormChange}
+                    className="form-input"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="finance-category-select" className="form-label">Category</label>
+                <select
+                  id="finance-category-select"
+                  name="category"
+                  value={financeForm.category}
+                  onChange={handleFinanceFormChange}
+                  className="form-input"
+                  style={{ background: 'var(--bg-deep)' }}
+                >
+                  <option value="General">General</option>
+                  <option value="Client Payment">Client Payment</option>
+                  <option value="Project Revenue">Project Revenue</option>
+                  <option value="Consulting">Consulting</option>
+                  <option value="Office Rent">Office Rent</option>
+                  <option value="Salaries">Salaries</option>
+                  <option value="Software & Tools">Software & Tools</option>
+                  <option value="Marketing">Marketing</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Utilities">Utilities</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="modal-form-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowFinanceModal(false)}
+                  className="btn-secondary"
+                  style={{ padding: '10px 20px', fontSize: '0.9rem' }}
+                  id="btn-finance-modal-cancel"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`btn-primary ${financeForm.type === 'expense' ? 'btn-danger' : ''}`}
+                  style={{ padding: '10px 20px', fontSize: '0.9rem' }}
+                  disabled={submittingFinance}
+                  id="btn-finance-modal-submit"
+                >
+                  {submittingFinance ? (
+                    <><Loader2 size={16} style={{ animation: 'spin 1.5s linear infinite' }} /> Saving...</>
+                  ) : (
+                    financeModalMode === 'create'
+                      ? `Add ${financeForm.type === 'income' ? 'Income' : 'Expense'}`
+                      : 'Save Changes'
                   )}
                 </button>
               </div>
