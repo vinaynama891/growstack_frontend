@@ -104,6 +104,8 @@ const AdminDashboard = ({ onClose }) => {
     title: '',
     description: '',
     amount: '',
+    discount: '',
+    paid: '',
     category: 'General',
     date: new Date().toISOString().split('T')[0]
   });
@@ -434,6 +436,8 @@ const AdminDashboard = ({ onClose }) => {
       title: '',
       description: '',
       amount: '',
+      discount: '',
+      paid: '',
       category: 'General',
       date: new Date().toISOString().split('T')[0]
     });
@@ -449,6 +453,8 @@ const AdminDashboard = ({ onClose }) => {
       title: entry.title,
       description: entry.description || '',
       amount: entry.amount.toString(),
+      discount: entry.discount != null ? entry.discount.toString() : '0',
+      paid: entry.paid != null ? entry.paid.toString() : '0',
       category: entry.category || 'General',
       date: new Date(entry.date).toISOString().split('T')[0]
     });
@@ -527,6 +533,13 @@ const AdminDashboard = ({ onClose }) => {
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
+
+  // Compute total pending from all income entries
+  const getTotalPending = () => {
+    return financeEntries
+      .filter(e => e.type === 'income')
+      .reduce((sum, e) => sum + (e.pending || 0), 0);
   };
 
   const getFilteredFinance = () => {
@@ -1252,6 +1265,16 @@ const AdminDashboard = ({ onClose }) => {
                       <span className="finance-card-value">{formatCurrency(Math.abs(financeSummary?.netPL ?? 0))}</span>
                     </div>
                   </div>
+
+                  <div className="finance-card pending">
+                    <div className="finance-card-icon">
+                      <Clock size={28} />
+                    </div>
+                    <div className="finance-card-info">
+                      <span className="finance-card-label">Total Pending</span>
+                      <span className="finance-card-value">{formatCurrency(getTotalPending())}</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* ── MONTHLY CHART ── */}
@@ -1349,7 +1372,10 @@ const AdminDashboard = ({ onClose }) => {
                             <th>Title & Description</th>
                             <th>Category</th>
                             <th>Date</th>
-                            <th>Amount</th>
+                            <th>Total</th>
+                            <th>Discount</th>
+                            <th>Paid</th>
+                            <th>Pending</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
@@ -1376,6 +1402,27 @@ const AdminDashboard = ({ onClose }) => {
                                 <span className={`finance-amount-cell ${entry.type}`}>
                                   {entry.type === 'income' ? '+' : '-'}{formatCurrency(entry.amount)}
                                 </span>
+                              </td>
+                              {/* Income-specific columns */}
+                              <td>
+                                {entry.type === 'income'
+                                  ? <span className="finance-pill discount">{formatCurrency(entry.discount || 0)}</span>
+                                  : <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>—</span>
+                                }
+                              </td>
+                              <td>
+                                {entry.type === 'income'
+                                  ? <span className="finance-pill paid">{formatCurrency(entry.paid || 0)}</span>
+                                  : <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>—</span>
+                                }
+                              </td>
+                              <td>
+                                {entry.type === 'income'
+                                  ? <span className={`finance-pill ${(entry.pending || 0) > 0 ? 'pending-warn' : 'paid'}`}>
+                                      {formatCurrency(entry.pending || 0)}
+                                    </span>
+                                  : <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>—</span>
+                                }
                               </td>
                               <td>
                                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -1737,7 +1784,7 @@ const AdminDashboard = ({ onClose }) => {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label htmlFor="finance-amount-input" className="form-label">Amount (₹) *</label>
+                  <label htmlFor="finance-amount-input" className="form-label">Total Amount (₹) *</label>
                   <input
                     type="number"
                     id="finance-amount-input"
@@ -1765,6 +1812,61 @@ const AdminDashboard = ({ onClose }) => {
                   />
                 </div>
               </div>
+
+              {/* Income-only: Discount / Paid / Pending */}
+              {financeForm.type === 'income' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="form-group">
+                      <label htmlFor="finance-discount-input" className="form-label">Discount (₹)</label>
+                      <input
+                        type="number"
+                        id="finance-discount-input"
+                        name="discount"
+                        value={financeForm.discount}
+                        onChange={handleFinanceFormChange}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                        className="form-input"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="finance-paid-input" className="form-label">Paid Amount (₹)</label>
+                      <input
+                        type="number"
+                        id="finance-paid-input"
+                        name="paid"
+                        value={financeForm.paid}
+                        onChange={handleFinanceFormChange}
+                        placeholder="0"
+                        min="0"
+                        step="0.01"
+                        className="form-input"
+                      />
+                    </div>
+                  </div>
+                  {/* Auto-calculated Pending */}
+                  <div className="finance-pending-preview">
+                    <span className="finance-pending-label">⏳ Pending Amount (auto-calculated)</span>
+                    <span className={`finance-pending-value ${
+                      Math.max(0,
+                        parseFloat(financeForm.amount || 0) -
+                        parseFloat(financeForm.discount || 0) -
+                        parseFloat(financeForm.paid || 0)
+                      ) > 0 ? 'warn' : 'clear'
+                    }`}>
+                      {formatCurrency(
+                        Math.max(0,
+                          parseFloat(financeForm.amount || 0) -
+                          parseFloat(financeForm.discount || 0) -
+                          parseFloat(financeForm.paid || 0)
+                        )
+                      )}
+                    </span>
+                  </div>
+                </>
+              )}
 
               <div className="form-group">
                 <label htmlFor="finance-category-select" className="form-label">Category</label>
