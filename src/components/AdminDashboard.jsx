@@ -116,6 +116,11 @@ const AdminDashboard = ({ onClose }) => {
   const [submittingInst, setSubmittingInst] = useState(false);
   const [instError, setInstError] = useState('');
 
+  // Sales Leads (submitted by callers)
+  const [salesLeads, setSalesLeads] = useState([]);
+  const [loadingSalesLeads, setLoadingSalesLeads] = useState(false);
+  const [salesLeadsFilter, setSalesLeadsFilter] = useState('all');
+
   // 1. Monitor Authentication Changes
   useEffect(() => {
     const handleAuthChange = () => {
@@ -140,6 +145,8 @@ const AdminDashboard = ({ onClose }) => {
     } else if (activeTab === 'finance') {
       fetchFinance();
       fetchFinanceSummary();
+    } else if (activeTab === 'sales_leads') {
+      fetchSalesLeads();
     }
   }, [token, activeTab]);
 
@@ -180,6 +187,7 @@ const AdminDashboard = ({ onClose }) => {
     setLoginError('');
 
     try {
+      // First try admin login
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,12 +196,46 @@ const AdminDashboard = ({ onClose }) => {
 
       const data = await response.json();
 
-      if (response.ok) {
+      // If admin login succeeded (200 OK) → log in as admin
+      if (response.ok && data.token) {
         localStorage.setItem('growstack_admin_token', data.token);
         localStorage.setItem('growstack_admin_email', data.email);
         window.dispatchEvent(new Event('admin-auth-change'));
         setLoginEmail('');
         setLoginPassword('');
+        return;
+      }
+
+      // Admin login failed (401/400) → try caller login
+      if (response.status === 401 || response.status === 400) {
+        try {
+          const callerRes = await fetch(`${API_URL}/auth/caller-login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: loginEmail.trim(), password: loginPassword.trim() })
+          });
+
+          if (callerRes.status === 404) {
+            // Caller endpoint not deployed yet on server
+            setLoginError('Invalid email or password.');
+            return;
+          }
+
+          const callerData = await callerRes.json();
+
+          if (callerRes.ok && callerData.token) {
+            localStorage.setItem('growstack_caller_token', callerData.token);
+            localStorage.setItem('growstack_caller_email', callerData.email);
+            localStorage.setItem('growstack_caller_name', callerData.name || 'Caller');
+            window.dispatchEvent(new Event('caller-auth-change'));
+            setLoginEmail('');
+            setLoginPassword('');
+            return;
+          }
+          setLoginError(callerData.message || 'Invalid email or password.');
+        } catch (callerErr) {
+          setLoginError('Invalid email or password.');
+        }
       } else {
         setLoginError(data.message || 'Invalid email or password.');
       }
@@ -608,6 +650,49 @@ const AdminDashboard = ({ onClose }) => {
     return financeEntries.filter(e => e.type === financeFilter);
   };
 
+  // --- Sales Leads (Caller Submissions) ---
+  const fetchSalesLeads = async () => {
+    setLoadingSalesLeads(true);
+    try {
+      const response = await fetch(`${API_URL}/admin/sales-leads`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSalesLeads(data);
+      } else {
+        handleApiError(response.status, 'Failed to fetch sales leads.');
+      }
+    } catch (err) {
+      console.error('Fetch sales leads error:', err);
+    } finally {
+      setLoadingSalesLeads(false);
+    }
+  };
+
+  const handleDeleteSalesLead = async (id) => {
+    if (!window.confirm('Delete this sales lead?')) return;
+    try {
+      const response = await fetch(`${API_URL}/admin/sales-leads/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        fetchSalesLeads();
+      } else {
+        const resData = await response.json();
+        alert(handleApiError(response.status, resData.message || 'Failed to delete sales lead.'));
+      }
+    } catch (err) {
+      alert('Network error.');
+    }
+  };
+
+  const getFilteredSalesLeads = () => {
+    if (salesLeadsFilter === 'all') return salesLeads;
+    return salesLeads.filter(sl => sl.status === salesLeadsFilter);
+  };
+
   // 3b. Projects Showcase Management Handlers
   const fetchProjects = async () => {
     setLoadingProjects(true);
@@ -970,6 +1055,15 @@ const AdminDashboard = ({ onClose }) => {
           >
             <IndianRupee size={18} />
             <span>Finance</span>
+          </button>
+          <button 
+            onClick={() => { setActiveTab('sales_leads'); setIsSidebarOpen(false); }}
+            className={`sidebar-btn ${activeTab === 'sales_leads' ? 'active' : ''}`}
+            id="sidebar-tab-sales-leads"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: '8px', paddingTop: '14px' }}
+          >
+            <Phone size={18} />
+            <span>Sales Leads</span>
           </button>
         </div>
         <div className="sidebar-footer">
@@ -2092,7 +2186,155 @@ const AdminDashboard = ({ onClose }) => {
           </div>
         </div>
       )}
-      
+
+      {/* --- SALES LEADS PANEL (submitted by callers) --- */}
+      {activeTab === 'sales_leads' && (
+        <div className="dashboard-panel" id="sales-leads-panel">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+            <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Phone size={20} style={{ color: 'var(--primary)' }} /> Sales Leads
+            </h2>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {['all', 'interested', 'not interested', 'follow up'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setSalesLeadsFilter(f)}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '100px',
+                    border: `1px solid ${salesLeadsFilter === f ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
+                    background: salesLeadsFilter === f ? 'rgba(59,130,246,0.15)' : 'transparent',
+                    color: salesLeadsFilter === f ? 'var(--primary)' : 'var(--text-dim)',
+                    cursor: 'pointer',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    textTransform: 'capitalize'
+                  }}
+                >
+                  {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                  <span style={{ marginLeft: '6px', opacity: 0.7 }}>
+                    ({f === 'all' ? salesLeads.length : salesLeads.filter(sl => sl.status === f).length})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loadingSalesLeads ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
+              <Loader2 size={36} style={{ color: 'var(--primary)', animation: 'spin 1.5s linear infinite' }} />
+            </div>
+          ) : getFilteredSalesLeads().length === 0 ? (
+            <div className="leads-empty">
+              <Phone size={48} className="leads-empty-icon" />
+              <p>No sales leads found{salesLeadsFilter !== 'all' ? ` with status "${salesLeadsFilter}"` : ''}.</p>
+            </div>
+          ) : (
+            <div className="leads-grid" id="sales-leads-grid">
+              {getFilteredSalesLeads().map((sl) => {
+                const statusColors = {
+                  'interested': { color: '#10b981', bg: 'rgba(16,185,129,0.1)', label: '✅ Interested' },
+                  'not interested': { color: '#ef4444', bg: 'rgba(239,68,68,0.1)', label: '❌ Not Interested' },
+                  'follow up': { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', label: '🔄 Follow Up' }
+                };
+                const sc = statusColors[sl.status] || statusColors['follow up'];
+                return (
+                  <div className="lead-card" key={sl._id} style={{ position: 'relative' }}>
+                    <div className="lead-card-header">
+                      <div className="lead-card-title-group">
+                        <h3 className="lead-card-name">{sl.businessName}</h3>
+                        <span className="lead-card-business">{sl.businessmanName}</span>
+                      </div>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        background: sc.bg,
+                        color: sc.color,
+                        border: `1px solid ${sc.color}33`,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {sc.label}
+                      </span>
+                    </div>
+
+                    <div className="lead-card-body">
+                      <div className="lead-info-row">
+                        <Phone size={14} style={{ color: 'var(--primary)' }} />
+                        <a href={`tel:${sl.contactNumber}`} className="lead-phone-link">{sl.contactNumber}</a>
+                      </div>
+                      <div className="lead-info-row">
+                        <Calendar size={14} style={{ color: 'var(--text-dim)' }} />
+                        <span>{new Date(sl.createdAt).toLocaleString()}</span>
+                      </div>
+                      {sl.submittedBy && (
+                        <div className="lead-info-row">
+                          <Mail size={14} style={{ color: 'var(--text-dim)' }} />
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-dim)' }}>
+                            Submitted by: <strong style={{ color: 'var(--text-secondary)' }}>{sl.submittedBy}</strong>
+                          </span>
+                        </div>
+                      )}
+                      {sl.notes && (
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <MessageSquare size={12} /> Call Notes
+                          </div>
+                          <div style={{
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.07)',
+                            borderRadius: '8px',
+                            padding: '10px 12px',
+                            fontSize: '0.84rem',
+                            color: 'var(--text-secondary)',
+                            lineHeight: 1.5
+                          }}>
+                            {sl.notes}
+                          </div>
+                        </div>
+                      )}
+                      {sl.callRecording && (
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <FileText size={12} /> Call Recording
+                          </div>
+                          <audio
+                            controls
+                            src={sl.callRecording}
+                            style={{ width: '100%', height: '36px', borderRadius: '8px' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="lead-card-actions" style={{ justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={() => handleDeleteSalesLead(sl._id)}
+                        className="btn-status"
+                        style={{
+                          background: 'rgba(239,68,68,0.08)',
+                          color: '#ef4444',
+                          border: '1px solid rgba(239,68,68,0.2)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
